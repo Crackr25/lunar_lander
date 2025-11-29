@@ -14,11 +14,9 @@ export default class GameScene extends Phaser.Scene {
         this.rotationSpeed = 0.05; // Rotation speed
 
         // Landing safety parameters
-        this.safeVerticalVelocity = 2.0;
-        this.safeHorizontalVelocity = 1.0;
-        this.safeAngle = 0.3; // ~17 degrees
-
-        this.safeAngle = 0.3; // ~17 degrees
+        this.safeVerticalVelocity = 4.0; // Increased from 2.0
+        this.safeHorizontalVelocity = 2.0; // Increased from 1.0
+        this.safeAngle = 0.5; // ~28 degrees (Increased from 0.3)
 
         // Reset state
         this.isGameOver = false;
@@ -199,36 +197,134 @@ export default class GameScene extends Phaser.Scene {
         }
     }
     createPad(x, y, width, type) {
-        const pad = this.matter.add.image(x, y + 5, 'landing_pad', null, {
+        // 1. Physics Body (Invisible, handles collision)
+        // We use a rectangle sensor or static body
+        const padHeight = 20; // Slightly thicker for visual platform
+        const body = this.matter.add.rectangle(x, y, width, padHeight, {
             isStatic: true,
             label: 'pad_' + type
         });
-        pad.setDisplaySize(width, 10);
-        let color = 0xff0000; // Default hard
-        if (type === 'easy') color = 0x00ff00;
-        else if (type === 'medium') color = 0xffff00;
-        else if (type === 'power') color = 0x00ffff; // Cyan
 
-        pad.setTint(color);
+        // 2. Visual Container
+        const container = this.add.container(x, y);
 
-        if (type === 'hard') {
+        // 3. Graphics for the platform
+        const graphics = this.add.graphics();
+        container.add(graphics);
+
+        // Colors
+        let mainColor = 0x888888; // Default concrete
+        let lightColor = 0xff0000;
+        let glowColor = 0x000000;
+
+        if (type === 'easy') { mainColor = 0x444444; lightColor = 0x00ff00; }
+        else if (type === 'medium') { mainColor = 0x444444; lightColor = 0xffff00; }
+        else if (type === 'hard') { mainColor = 0x222222; lightColor = 0xff0000; }
+        else if (type === 'power') { mainColor = 0x222244; lightColor = 0x00ffff; glowColor = 0x00ffff; }
+
+        // Draw Support Legs (Truss structure)
+        graphics.lineStyle(2, 0x555555);
+        const legSpacing = 20;
+        for (let lx = -width / 2 + 10; lx < width / 2; lx += legSpacing) {
+            graphics.moveTo(lx, 0);
+            graphics.lineTo(lx + 5, 30); // Angled leg
+            graphics.moveTo(lx, 0);
+            graphics.lineTo(lx - 5, 30);
+        }
+        graphics.strokePath();
+
+        // Draw Platform Base
+        graphics.fillStyle(mainColor);
+        graphics.fillRoundedRect(-width / 2, -padHeight / 2, width, padHeight, 5);
+
+        // Draw Top Surface (Metallic/Tech)
+        graphics.fillStyle(0xaaaaaa, 0.3); // Shine
+        graphics.fillRect(-width / 2, -padHeight / 2, width, 5);
+
+        // Draw Lights/Rim
+        if (type === 'power') {
+            // Glowing Rim
+            graphics.lineStyle(2, lightColor, 1);
+            graphics.strokeRoundedRect(-width / 2, -padHeight / 2, width, padHeight, 5);
+
+            // Pulsing Core
+            const core = this.add.rectangle(0, 0, width - 20, 5, lightColor, 0.8);
+            container.add(core);
+
             this.tweens.add({
-                targets: pad,
-                x: pad.x + 100,
-                duration: 3000,
+                targets: core,
+                alpha: 0.2,
+                scaleX: 0.9,
+                duration: 1000,
                 yoyo: true,
                 repeat: -1,
                 ease: 'Sine.easeInOut'
             });
-        } else if (type === 'power') {
-            // Pulsing effect
+
+            // Outer Glow (using multiple transparent rects or shadow if supported, simple alpha rects here)
+            const glow = this.add.graphics();
+            glow.fillStyle(glowColor, 0.2);
+            glow.fillRoundedRect(-width / 2 - 5, -padHeight / 2 - 5, width + 10, padHeight + 10, 10);
+            container.addAt(glow, 0); // Behind everything
+
             this.tweens.add({
-                targets: pad,
-                alpha: { from: 1, to: 0.5 },
-                duration: 800,
+                targets: glow,
+                alpha: 0.5,
+                duration: 1500,
+                yoyo: true,
+                repeat: -1
+            });
+
+        } else {
+            // Standard Landing Lights
+            const lightSpacing = width - 20;
+            const leftLight = this.add.circle(-lightSpacing / 2, -padHeight / 2, 3, lightColor);
+            const rightLight = this.add.circle(lightSpacing / 2, -padHeight / 2, 3, lightColor);
+            container.add([leftLight, rightLight]);
+
+            this.tweens.add({
+                targets: [leftLight, rightLight],
+                alpha: 0.2,
+                duration: 500,
+                yoyo: true,
+                repeat: -1
+            });
+        }
+
+        // Hard mode movement
+        if (type === 'hard') {
+            this.tweens.add({
+                targets: [body.position, container],
+                x: x + 100,
+                duration: 3000,
                 yoyo: true,
                 repeat: -1,
-                ease: 'Sine.easeInOut'
+                ease: 'Sine.easeInOut',
+                onUpdate: () => {
+                    // Sync physics body if needed, but tweening body.position directly works for Matter
+                    // However, container needs separate tween or update
+                    // Actually, let's tween a value and update both
+                }
+            });
+
+            // Re-do tween to sync properly
+            // Remove previous tween
+            this.tweens.killTweensOf(container);
+
+            // Create a custom object to tween
+            const tweenObj = { val: 0 };
+            this.tweens.add({
+                targets: tweenObj,
+                val: 1,
+                duration: 3000,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut',
+                onUpdate: () => {
+                    const offsetX = tweenObj.val * 100;
+                    this.matter.body.setPosition(body, { x: x + offsetX, y: body.position.y });
+                    container.x = x + offsetX;
+                }
             });
         }
     }
