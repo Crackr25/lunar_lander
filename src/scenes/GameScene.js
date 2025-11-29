@@ -10,7 +10,7 @@ export default class GameScene extends Phaser.Scene {
         this.fuel = 100;
         this.maxFuel = 100;
         this.gravity = 0.5; // Matter.js world gravity y
-        this.thrustForce = 0.025; // Reduced from 0.05
+        this.thrustForce = 0.01; // Reduced from 0.025
         this.rotationSpeed = 0.05; // Rotation speed
 
         // Landing safety parameters
@@ -148,7 +148,8 @@ export default class GameScene extends Phaser.Scene {
         const pads = [
             { index: 5, width: 100, type: 'easy' },
             { index: 10, width: 60, type: 'medium' },
-            { index: 15, width: 40, type: 'hard' }
+            { index: 15, width: 40, type: 'hard' },
+            { index: 8, width: 150, type: 'power' }
         ];
 
         for (let i = 0; i < segments; i++) {
@@ -203,13 +204,28 @@ export default class GameScene extends Phaser.Scene {
             label: 'pad_' + type
         });
         pad.setDisplaySize(width, 10);
-        pad.setTint(type === 'easy' ? 0x00ff00 : type === 'medium' ? 0xffff00 : 0xff0000);
+        let color = 0xff0000; // Default hard
+        if (type === 'easy') color = 0x00ff00;
+        else if (type === 'medium') color = 0xffff00;
+        else if (type === 'power') color = 0x00ffff; // Cyan
+
+        pad.setTint(color);
 
         if (type === 'hard') {
             this.tweens.add({
                 targets: pad,
                 x: pad.x + 100,
                 duration: 3000,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+        } else if (type === 'power') {
+            // Pulsing effect
+            this.tweens.add({
+                targets: pad,
+                alpha: { from: 1, to: 0.5 },
+                duration: 800,
                 yoyo: true,
                 repeat: -1,
                 ease: 'Sine.easeInOut'
